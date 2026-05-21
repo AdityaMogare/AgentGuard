@@ -1,0 +1,91 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+pip-log.txt
+pip-delete-this-directory.txt
+
+# --- Virtual environments ---
+venv/
+.venv/
+env/
+ENV/
+
+# --- Django ---
+*.sqlite3
+*.sqlite3-journal
+db.sqlite3
+local_settings.py
+media/
+staticfiles/
+
+# --- Secrets / env ---
+.env
+.env.*
+!.env.example
+
+# --- Testing / coverage ---
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# --- Celery / Redis ---
+celerybeat-schedule
+celerybeat.pid
+dump.rdb
+
+# --- Logs ---
+*.log
+logs/
+
+# --- OS / editors ---
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# --- Frontend (Stage 5+) ---
+node_modules/
+.next/
+out/
+dist/
+*.tsbuildinfo
+
+# --- Cursor (local IDE state) ---
+.cursor/
+
+# --- Demo / recordings (optional local artifacts) ---
+*.mov
+*.mp4
+!docs/**/*.mp4
