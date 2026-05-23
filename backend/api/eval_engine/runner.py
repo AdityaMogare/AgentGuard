@@ -8,7 +8,7 @@ from openai import OpenAI
 
 from api.models import EvalRun, EvalResult, Trace, PromptVersion
 from .scorers import ScorerRegistry
-from sdk.promptops.utils import count_tokens, calculate_cost
+from promptops.utils import count_tokens, calculate_cost
 
 logger = logging.getLogger("promptops.eval_engine")
 

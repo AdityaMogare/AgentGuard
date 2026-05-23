@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentguard"
+version = "0.1.0"
+description = "Multi-agent AI observability SDK — stream execution spans to Splunk HEC and Django."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.8"
+authors = [{ name = "Aditya Mogare" }]
+keywords = ["splunk", "agents", "tracing", "observability", "hec", "mcp", "llm"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Topic :: System :: Monitoring",
+]
+dependencies = [
+    "requests>=2.25.0",
+    "tiktoken>=0.3.0",
+]
+
+[project.optional-dependencies]
+dev = ["psutil>=5.9"]
+
+[project.urls]
+Homepage = "https://github.com/adityamogare/PromptOps"
+Repository = "https://github.com/adityamogare/PromptOps"
+Documentation = "https://github.com/adityamogare/PromptOps#readme"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["agentguard*", "promptops*"]

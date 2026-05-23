@@ -85,6 +85,11 @@ dist/
 # --- Cursor (local IDE state) ---
 .cursor/
 
+# --- Python packaging (sdk/) ---
+sdk/dist/
+sdk/build/
+*.egg-info/
+
 # --- Demo / recordings (optional local artifacts) ---
 *.mov
 *.mp4

@@ -1,0 +1,49 @@
+<dashboard version="1.1" theme="light">
+  <label>AgentGuard Overview</label>
+  <description>Real-time health and failure patterns for instrumented AI agents (sourcetype=agentguard:trace)</description>
+
+  <row>
+    <panel>
+      <title>Failures (15m)</title>
+      <chart>
+        <search>
+          <query>index=main sourcetype=agentguard:trace status=FAILED earliest=-15m | timechart count by agent_name</query>
+          <earliest>-15m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">line</option>
+      </chart>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Agent health</title>
+      <table>
+        <search ref="agentguard_error_breakdown"></search>
+        <option name="count">20</option>
+      </table>
+    </panel>
+    <panel>
+      <title>P95 latency by agent</title>
+      <chart>
+        <search ref="agentguard_latency_p95"></search>
+        <option name="charting.chart">bar</option>
+      </chart>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Recent failed spans</title>
+      <table>
+        <search>
+          <query>index=main sourcetype=agentguard:trace status=FAILED earliest=-1h | table _time agent_name trace_id error_type tool_name latency_ms | sort -_time</query>
+          <earliest>-1h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">25</option>
+      </table>
+    </panel>
+  </row>
+</dashboard>
