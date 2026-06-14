@@ -31,7 +31,7 @@ def monitor_cycle():
 |----------|---------|
 | `SPLUNK_HEC_URL` | e.g. `https://localhost:8088` |
 | `SPLUNK_HEC_TOKEN` | HEC token |
-| `AGENTGUARD_BACKEND_URL` | Django API (default `http://localhost:8000`) |
+| `AGENTGUARD_BACKEND_URL` | Django API (default `http://localhost:8001`) |
 
 ## Demo
 

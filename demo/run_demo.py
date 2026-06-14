@@ -8,7 +8,7 @@ Usage:
   python demo/run_demo.py --cycles 5
 
 Backend-only (no Splunk):
-  AGENTGUARD_BACKEND_URL=http://localhost:8000 python demo/run_demo.py --backend-only
+  AGENTGUARD_BACKEND_URL=http://localhost:8001 python demo/run_demo.py --backend-only
 """
 from __future__ import annotations
 

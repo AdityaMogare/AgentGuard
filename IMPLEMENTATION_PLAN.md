@@ -18,6 +18,9 @@ AgentGuard instruments multi-agent AI systems with a lightweight Python SDK, str
 | **4** | Splunk: HEC env docs, `splunk_app/` saved searches + dashboard | ✅ Done |
 | **5** | MCP: 3 tools + Splunk job polling + Django fallback | ✅ Done |
 | **6** | Polish: README, PyPI `agentguard`, optional React | 🔄 README done; PyPI manual; React optional |
+| **7** | Hackathon: AI Assistant NL→SPL, MLTK/anomaly, smart alerts, demo script | ✅ Done |
+
+**Phase 7 files:** `mcp_server/ai_assistant.py`, `mcp_server/anomaly.py`, `splunk_app/mltk_setup.py`, `splunk_app/default/alerts.conf`, `sdk/agentguard/alert_handler.py`, `scripts/demo.py`, `scripts/setup.sh`
 
 **Deprioritized / removed:** Python eval engine, Dataset/EvalRun APIs, LurisQA demo, GitHub Actions eval CLI.
 

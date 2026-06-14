@@ -1,127 +1,42 @@
 #!/usr/bin/env python3
 """
-AgentGuard Splunk MCP server — 3 tools for querying agent telemetry.
+AgentGuard Splunk MCP server — query agent telemetry + AI/ML features.
 
 Environment:
-  SPLUNK_MOCK=1          Return sample data (default for local dev)
-  SPLUNK_MOCK=0          Use Splunk REST; falls back to Django API on failure
-  SPLUNK_HOST            https://localhost:8089
-  SPLUNK_REST_TOKEN      Splunk management token
-  AGENTGUARD_BACKEND_URL http://localhost:8000 (Django fallback)
+  SPLUNK_MOCK=1              Mock data (default for local dev)
+  SPLUNK_MOCK=0              Real Splunk REST + Django fallback
+  SPLUNK_HOST                https://localhost:8089
+  SPLUNK_REST_TOKEN          Splunk session key (Splunk auth scheme)
+  SPLUNK_TOKEN               Alias for SPLUNK_REST_TOKEN
+  SPLUNK_AI_ASSISTANT_ENABLED=1  Enable NL→SPL via AI Assistant API
+  AGENTGUARD_BACKEND_URL     http://localhost:8001 (Django fallback)
 """
 from __future__ import annotations
 
 import json
 import os
-import time
-import xml.etree.ElementTree as ET
-from typing import Any, Callable, Dict, List, Optional, Tuple
+import sys
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 try:
     from mcp.server.fastmcp import FastMCP
 except ImportError:
     FastMCP = None  # type: ignore
 
+from mcp_server import ai_assistant, anomaly, splunk_client
+
 mcp = FastMCP("agentguard-splunk") if FastMCP else None
 
-MOCK_TRACES = [
-    {
-        "trace_id": "11111111-1111-1111-1111-111111111111",
-        "agent_name": "cpu_monitor",
-        "status": "FAILED",
-        "error_type": "RuntimeError",
-        "latency_ms": 42.1,
-        "tool_name": "psutil.cpu_percent",
-    },
-    {
-        "trace_id": "22222222-2222-2222-2222-222222222222",
-        "agent_name": "memory_monitor",
-        "status": "SUCCESS",
-        "error_type": None,
-        "latency_ms": 18.4,
-        "tool_name": None,
-    },
-]
-
-
-class SearchError(Exception):
-    """Raised when Splunk and Django fallback both fail."""
-
-
-def _use_mock() -> bool:
-    return os.environ.get("SPLUNK_MOCK", "1").strip() == "1"
-
-
-def _splunk_session():
-    import requests
-
-    host = os.environ.get("SPLUNK_HOST", "https://localhost:8089").rstrip("/")
-    token = os.environ.get("SPLUNK_REST_TOKEN", "").strip()
-    verify = os.environ.get("SPLUNK_VERIFY_SSL", "0").strip() == "1"
-    if not token:
-        raise SearchError("SPLUNK_REST_TOKEN not set")
-    session = requests.Session()
-    session.headers.update({"Authorization": f"Bearer {token}"})
-    session.verify = verify
-    return session, host
-
-
-def _splunk_create_job(session, host: str, spl: str) -> str:
-    resp = session.post(
-        f"{host}/services/search/jobs",
-        data={"search": spl, "exec_mode": "normal"},
-        timeout=30,
-    )
-    resp.raise_for_status()
-    root = ET.fromstring(resp.text)
-    sid = root.findtext(".//sid")
-    if not sid:
-        raise SearchError(f"Splunk job creation failed: no sid in response")
-    return sid
-
-
-def _splunk_wait_job(session, host: str, sid: str, timeout: int = 60) -> None:
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        resp = session.get(
-            f"{host}/services/search/jobs/{sid}",
-            params={"output_mode": "json"},
-            timeout=15,
-        )
-        resp.raise_for_status()
-        payload = resp.json()
-        entry = (payload.get("entry") or [{}])[0]
-        content = entry.get("content", {})
-        if content.get("isDone") in (True, "1", 1):
-            if int(content.get("dispatchState", 0)) == -1 or content.get("isFailed"):
-                raise SearchError(f"Splunk job {sid} failed")
-            return
-        time.sleep(0.5)
-    raise SearchError(f"Splunk job {sid} timed out after {timeout}s")
-
-
-def _splunk_fetch_results(session, host: str, sid: str, count: int = 50) -> List[Dict[str, Any]]:
-    resp = session.get(
-        f"{host}/services/search/jobs/{sid}/results",
-        params={"output_mode": "json", "count": count},
-        timeout=30,
-    )
-    resp.raise_for_status()
-    payload = resp.json()
-    return payload.get("results") or []
-
-
-def _splunk_search(spl: str, count: int = 50) -> Tuple[List[Dict[str, Any]], str]:
-    """Run SPL via Splunk REST job API. Returns (rows, source)."""
-    session, host = _splunk_session()
-    sid = _splunk_create_job(session, host, spl)
-    _splunk_wait_job(session, host, sid)
-    rows = _splunk_fetch_results(session, host, sid, count=count)
-    return rows, "splunk"
+MOCK_TRACES = anomaly.mock_traces()
 
 
 def _django_backend_url() -> str:
-    return os.environ.get("AGENTGUARD_BACKEND_URL", "http://localhost:8000").rstrip("/")
+    return os.environ.get("AGENTGUARD_BACKEND_URL", "http://localhost:8001").rstrip("/")
 
 
 def _django_headers() -> Dict[str, str]:
@@ -215,17 +130,15 @@ def query_rows(
     django_fallback: Optional[Callable[[], List[Dict[str, Any]]]] = None,
     count: int = 50,
 ) -> Dict[str, Any]:
-    """
-    Execute search with mock / Splunk / Django fallback chain.
-    """
-    if _use_mock():
+    """Execute search with mock / Splunk / Django fallback chain."""
+    if splunk_client.use_mock():
         return {"source": "mock", "results": MOCK_TRACES, "spl": spl, "warning": None}
 
     errors: List[str] = []
     try:
-        rows, source = _splunk_search(spl, count=count)
+        rows, source = splunk_client.run_search(spl, count=count)
         return {"source": source, "results": rows, "spl": spl, "warning": None}
-    except Exception as exc:
+    except splunk_client.SearchError as exc:
         errors.append(f"Splunk: {exc}")
 
     if django_fallback:
@@ -240,7 +153,7 @@ def query_rows(
         except Exception as exc:
             errors.append(f"Django: {exc}")
 
-    raise SearchError("; ".join(errors))
+    raise splunk_client.SearchError("; ".join(errors))
 
 
 if mcp:
@@ -252,12 +165,12 @@ if mcp:
         minutes: int = 15,
     ) -> str:
         """Search recent agent spans in Splunk. Filter by agent_name and status (SUCCESS/FAILED/TIMEOUT)."""
-        clauses = ['sourcetype="agentguard:trace"']
+        clauses = [splunk_client.trace_base_filter()]
         if agent_name:
             clauses.append(f'agent_name="{agent_name}"')
         if status:
             clauses.append(f'status="{status}"')
-        spl = f"search index=main {' '.join(clauses)} earliest=-{minutes}m | head 50"
+        spl = f"search {' '.join(clauses)} earliest=-{minutes}m | head 50"
 
         def django_fb():
             return _django_list_agents(agent_name=agent_name, status=status)
@@ -265,14 +178,14 @@ if mcp:
         try:
             payload = query_rows(spl, django_fallback=django_fb)
             return json.dumps(payload, indent=2)
-        except SearchError as exc:
+        except splunk_client.SearchError as exc:
             return json.dumps({"error": str(exc), "spl": spl}, indent=2)
 
     @mcp.tool()
     def explain_agent_failure(trace_id: str) -> str:
         """Return span details and error context for a failed agent trace_id."""
         spl = (
-            f'search index=main sourcetype="agentguard:trace" trace_id="{trace_id}" '
+            f"search {splunk_client.trace_base_filter()} trace_id=\"{trace_id}\" "
             "| sort -timestamp | head 20"
         )
 
@@ -299,14 +212,14 @@ if mcp:
                 },
                 indent=2,
             )
-        except SearchError as exc:
+        except splunk_client.SearchError as exc:
             return json.dumps({"error": str(exc), "trace_id": trace_id, "spl": spl}, indent=2)
 
     @mcp.tool()
     def agent_health_summary(minutes: int = 60) -> str:
         """Aggregate pass/fail rates and top error types by agent_name."""
         spl = (
-            f"search index=main sourcetype=agentguard:trace earliest=-{minutes}m "
+            f"search {splunk_client.trace_base_filter()} earliest=-{minutes}m "
             "| stats count as total "
             'count(eval(status="SUCCESS")) as success '
             'count(eval(status="FAILED" OR status="TIMEOUT")) as failures '
@@ -324,8 +237,33 @@ if mcp:
                 },
                 indent=2,
             )
-        except SearchError as exc:
+        except splunk_client.SearchError as exc:
             return json.dumps({"error": str(exc), "spl": spl}, indent=2)
+
+    @mcp.tool()
+    def nl_search(question: str) -> str:
+        """Convert natural language to SPL and run the search. Falls back to rule-based SPL if AI Assistant is unavailable."""
+        return json.dumps(ai_assistant.nl_search(question), indent=2)
+
+    @mcp.tool()
+    def anomaly_detection(agent_name: Optional[str] = None, minutes: int = 60) -> str:
+        """Detect latency/event anomalies using MLTK DensityFunction or built-in anomalydetection."""
+        return json.dumps(anomaly.anomaly_detection(agent_name, minutes), indent=2)
+
+    @mcp.tool()
+    def failure_rate_analysis(minutes: int = 60) -> str:
+        """Compute failure rates and error types per agent over a time window."""
+        return json.dumps(anomaly.failure_rate_analysis(minutes), indent=2)
+
+    @mcp.tool()
+    def alert_summary(hours: int = 24) -> str:
+        """Summarize fired AgentGuard Splunk alerts (or FAILED-span proxy when alert log unavailable)."""
+        return json.dumps(anomaly.alert_summary(hours), indent=2)
+
+    @mcp.tool()
+    def check_ai_features() -> str:
+        """Report availability of Splunk AI Assistant, MLTK, and fallback modes."""
+        return json.dumps(ai_assistant.check_ai_features(), indent=2)
 
 
 def main():

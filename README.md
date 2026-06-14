@@ -25,6 +25,17 @@ flowchart LR
 
 AgentGuard instruments multi-agent AI systems with a lightweight Python SDK, streams execution traces into Splunk via HEC, surfaces failure patterns in real-time SPL dashboards, and exposes a Splunk MCP server so Claude can query telemetry to explain why agents failed.
 
+## Ports (important)
+
+| Service | URL | Purpose |
+|---------|-----|---------|
+| **Splunk Web** | `http://localhost:8000` | Splunk UI, dashboards, HEC token setup |
+| **AgentGuard Django** | `http://localhost:8001` | Span ingest API, alert webhooks |
+| **Splunk HEC** | `https://localhost:8088` | SDK sends spans here |
+| **Splunk REST** | `https://localhost:8089` | MCP / Claude queries |
+
+Do **not** run Django on port 8000 — that port belongs to Splunk. Splunk URLs like `/en-GB/app/...` will 404 on Django.
+
 ## Quick start
 
 ### 1. SDK + demo agents
@@ -45,7 +56,7 @@ python demo/inject_failure.py
 Backend-only (no Splunk):
 
 ```bash
-AGENTGUARD_BACKEND_URL=http://localhost:8000 python demo/run_demo.py --backend-only
+AGENTGUARD_BACKEND_URL=http://localhost:8001 python demo/run_demo.py --backend-only
 ```
 
 ### 2. Django backend (optional mirror)
@@ -54,8 +65,8 @@ AGENTGUARD_BACKEND_URL=http://localhost:8000 python demo/run_demo.py --backend-o
 cd backend
 python manage.py makemigrations api   # first time only
 python manage.py migrate
-python manage.py runserver
-# GET http://localhost:8000/api/v1/agents/
+python manage.py runserver 8001
+# GET http://localhost:8001/api/v1/agents/
 ```
 
 Optional ingest auth: set `AGENTGUARD_API_KEY` in `.env` (SDK sends `Authorization: Api-Key ...`).
@@ -78,10 +89,33 @@ SPLUNK_MOCK=1 python mcp_server/server.py
 With Django fallback when Splunk is unavailable:
 
 ```bash
-SPLUNK_MOCK=0 AGENTGUARD_BACKEND_URL=http://localhost:8000 python mcp_server/server.py
+SPLUNK_MOCK=0 AGENTGUARD_BACKEND_URL=http://localhost:8001 python mcp_server/server.py
 ```
 
-Tools: `search_agent_traces`, `explain_agent_failure`, `agent_health_summary`
+Tools: `search_agent_traces`, `explain_agent_failure`, `agent_health_summary`, `nl_search`, `anomaly_detection`, `failure_rate_analysis`, `alert_summary`, `check_ai_features`
+
+### 5. Hackathon demo (24h sprint)
+
+```bash
+chmod +x scripts/setup.sh
+./scripts/setup.sh
+
+# Terminal 1
+cd backend && python manage.py runserver 8001
+
+# Terminal 2
+python scripts/demo.py --traces 150 --backend-only
+```
+
+Layers added for demo day:
+
+| Layer | What | Files |
+|-------|------|-------|
+| Splunk AI Assistant | NL → SPL (rule-based fallback) | `mcp_server/ai_assistant.py` |
+| MLTK / anomaly | `DensityFunction` or `anomalydetection` | `splunk_app/mltk_setup.py`, saved searches |
+| Smart alerting | Splunk webhooks → Django | `splunk_app/default/alerts.conf`, `sdk/agentguard/alert_handler.py` |
+
+Live Splunk: set `SPLUNK_MOCK=0`, `SPLUNK_HEC_*`, `SPLUNK_REST_TOKEN`, optional `SPLUNK_AI_ASSISTANT_ENABLED=1`.
 
 ## Repo layout
 
@@ -90,8 +124,9 @@ Tools: `search_agent_traces`, `explain_agent_failure`, `agent_health_summary`
 | `sdk/agentguard/` | SDK: `@trace_agent`, `@trace_tool`, HEC + backend exporters |
 | `backend/` | Django + DRF span ingest |
 | `demo/` | psutil infrastructure monitors |
-| `mcp_server/` | Splunk MCP tools |
-| `splunk_app/` | SPL saved searches + dashboard guide |
+| `mcp_server/` | Splunk MCP tools + AI Assistant NL→SPL |
+| `splunk_app/` | SPL saved searches, alerts, MLTK setup |
+| `scripts/` | `setup.sh`, `demo.py` hackathon pipeline |
 | `IMPLEMENTATION_PLAN.md` | Full build roadmap |
 
 ## Legacy PromptOps

@@ -8,6 +8,7 @@ from .views import (
     CompareRunsView
 )
 from .agent_views import SpanIngestView, AgentRunViewSet
+from .alert_views import AlertWebhookView
 
 # Use DRF Default Router to register ViewSets
 router = DefaultRouter()
@@ -19,6 +20,8 @@ router.register(r'agents', AgentRunViewSet, basename='agent')
 urlpatterns = [
     # AgentGuard span ingest (SDK backend exporter)
     path('spans/ingest/', SpanIngestView.as_view(), name='span-ingest'),
+    # Splunk alert webhook
+    path('alerts/webhook/', AlertWebhookView.as_view(), name='alert-webhook'),
     # Legacy PromptOps (deprecated — kept for reference; use AgentGuard spans)
     path('traces/ingest/', TraceIngestView.as_view(), name='trace-ingest'),
     

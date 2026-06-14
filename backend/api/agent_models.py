@@ -57,3 +57,23 @@ class Span(models.Model):
 
     def __str__(self):
         return f"Span {str(self.span_id)[:8]} ({self.status})"
+
+
+class AgentAlert(models.Model):
+    """Inbound Splunk alert webhook payload."""
+
+    alert_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    alert_name = models.CharField(max_length=200, db_index=True)
+    severity = models.CharField(max_length=50, default="medium")
+    agent_name = models.CharField(max_length=200, blank=True, db_index=True)
+    trace_id = models.UUIDField(null=True, blank=True, db_index=True)
+    message = models.TextField(blank=True)
+    payload = models.JSONField(default=dict)
+    received_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    acknowledged = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-received_at"]
+
+    def __str__(self):
+        return f"{self.alert_name} ({self.severity})"

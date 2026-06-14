@@ -84,7 +84,7 @@ def configure(
     splunk_hec_token: Optional[str] = None,
     splunk_index: str = "main",
     splunk_verify_ssl: bool = True,
-    backend_url: Optional[str] = "http://localhost:8000",
+    backend_url: Optional[str] = "http://localhost:8001",
     api_key: Optional[str] = None,
     enable_splunk: bool = True,
     enable_backend: bool = True,
@@ -101,7 +101,7 @@ def configure(
 
     hec_url = splunk_hec_url or os.environ.get("SPLUNK_HEC_URL")
     hec_token = splunk_hec_token or os.environ.get("SPLUNK_HEC_TOKEN")
-    backend = backend_url or os.environ.get("AGENTGUARD_BACKEND_URL", "http://localhost:8000")
+    backend = backend_url or os.environ.get("AGENTGUARD_BACKEND_URL", "http://localhost:8001")
     key = api_key or os.environ.get("AGENTGUARD_API_KEY")
 
     if enable_splunk and hec_url and hec_token:

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .agent_models import AgentRun, Span
+from .agent_models import AgentRun, Span, AgentAlert
 
 
 class SpanInline(admin.TabularInline):
@@ -50,3 +50,18 @@ class SpanAdmin(admin.ModelAdmin):
     )
     list_filter = ("status", "action_type", "agent_name")
     search_fields = ("span_id", "agent_name", "tool_name")
+
+
+@admin.register(AgentAlert)
+class AgentAlertAdmin(admin.ModelAdmin):
+    list_display = (
+        "alert_name",
+        "severity",
+        "agent_name",
+        "trace_id",
+        "received_at",
+        "acknowledged",
+    )
+    list_filter = ("severity", "alert_name", "acknowledged")
+    search_fields = ("alert_name", "agent_name", "message")
+    readonly_fields = ("alert_id", "received_at", "payload")

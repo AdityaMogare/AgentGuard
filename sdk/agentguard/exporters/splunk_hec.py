@@ -1,3 +1,5 @@
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 import json
 import logging
 import time
@@ -23,7 +25,7 @@ class SplunkHECExporter(SpanExporter):
         index: str = "main",
         sourcetype: str = "agentguard:trace",
         source: str = "agentguard-sdk",
-        verify_ssl: bool = True,
+        verify_ssl: bool = False,
     ):
         base = hec_url.rstrip("/")
         if base.endswith("/services/collector"):

@@ -14,7 +14,7 @@ class BackendExporter(SpanExporter):
 
     def __init__(
         self,
-        api_url: str = "http://localhost:8000",
+        api_url: str = "http://localhost:8001",
         api_key: Optional[str] = None,
     ):
         self._api_url = api_url.rstrip("/")

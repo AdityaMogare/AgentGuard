@@ -6,7 +6,7 @@ Install on Splunk Enterprise / Cloud. Indexes events with `sourcetype=agentguard
 
 1. Copy or symlink this folder into `$SPLUNK_HOME/etc/apps/agentguard`
 2. Restart Splunk (or install via **Manage Apps → Install app from file** after packaging)
-3. Open **AgentGuard Overview** dashboard under Apps
+3. Open **AgentGuard Overview** at `http://localhost:8000` → Apps (Splunk Web, not Django)
 
 ```bash
 # Development install (Splunk Enterprise)

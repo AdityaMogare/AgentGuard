@@ -17,7 +17,10 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 
+from api.root_views import root
+
 urlpatterns = [
+    path("", root),
     path('admin/', admin.site.urls),
     # API endpoints prefixed with api/v1/
     path('api/v1/', include('api.urls')),
