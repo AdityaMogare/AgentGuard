@@ -44,7 +44,20 @@ AgentGuard instruments multi-agent AI systems with a lightweight Python SDK, str
 
 Do **not** run Django on port 8000 — that port belongs to Splunk. Splunk URLs like `/en-GB/app/...` will 404 on Django.
 
-## Quick start
+## Docker (share with a teammate)
+
+**Prerequisites:** Docker Desktop only.
+
+```bash
+cp .env.docker.example .env
+docker compose up --build -d
+docker compose run --rm demo
+```
+
+- API: http://localhost:8001/api/v1/agents/
+- Full guide: [DOCKER.md](DOCKER.md)
+
+## Quick start (local Python)
 
 ### 1. SDK + demo agents
 
@@ -135,6 +148,8 @@ Live Splunk: set `SPLUNK_MOCK=0`, `SPLUNK_HEC_*`, `SPLUNK_REST_TOKEN`, optional 
 | `mcp_server/` | Splunk MCP tools + AI Assistant NL→SPL |
 | `splunk_app/` | SPL saved searches, alerts, MLTK setup |
 | `scripts/` | `setup.sh`, `demo.py` hackathon pipeline |
+| `DOCKER.md` | Docker Compose setup for teammates |
+| `docker-compose.yml` | API + PostgreSQL + Redis |
 | `IMPLEMENTATION_PLAN.md` | Full build roadmap |
 
 ## Legacy PromptOps

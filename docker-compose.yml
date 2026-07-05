@@ -1,0 +1,113 @@
+# AgentGuard — one-command stack for teammates
+#
+# Quick start:
+#   cp .env.docker.example .env
+#   docker compose up --build -d
+#   docker compose run --rm demo
+#
+# API:  http://localhost:8001
+# Splunk (optional, on host): http://localhost:8000
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-agentguard}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agentguard}
+      POSTGRES_DB: ${POSTGRES_DB:-agentguard}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-agentguard} -d ${POSTGRES_DB:-agentguard}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${API_PORT:-8001}:8001"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-agentguard}:${POSTGRES_PASSWORD:-agentguard}@db:5432/${POSTGRES_DB:-agentguard}
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      CELERY_TASK_ALWAYS_EAGER: ${CELERY_TASK_ALWAYS_EAGER:-1}
+      AGENTGUARD_BACKEND_URL: http://api:8001
+      AGENTGUARD_API_KEY: ${AGENTGUARD_API_KEY:-}
+      SPLUNK_MOCK: ${SPLUNK_MOCK:-1}
+      SPLUNK_HEC_URL: ${SPLUNK_HEC_URL:-}
+      SPLUNK_HEC_TOKEN: ${SPLUNK_HEC_TOKEN:-}
+      SPLUNK_HOST: ${SPLUNK_HOST:-https://host.docker.internal:8089}
+      SPLUNK_REST_TOKEN: ${SPLUNK_REST_TOKEN:-}
+      SPLUNK_VERIFY_SSL: ${SPLUNK_VERIFY_SSL:-0}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-change-me-in-production}
+      DEBUG: ${DEBUG:-1}
+    extra_hosts:
+      # Reach Splunk on the host machine from inside containers (Mac/Windows)
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/')",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # One-shot: inject 150 demo spans into the API
+  demo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles: ["demo"]
+    entrypoint: ["/entrypoint.sh", "demo"]
+    command: ["--traces", "150", "--backend-only"]
+    environment:
+      AGENTGUARD_BACKEND_URL: http://api:8001
+      AGENTGUARD_API_KEY: ${AGENTGUARD_API_KEY:-}
+      SPLUNK_MOCK: ${SPLUNK_MOCK:-1}
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # psutil agents → API (+ Splunk HEC if tokens set in .env)
+  psutil-demo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles: ["demo"]
+    entrypoint: ["/entrypoint.sh", "psutil-demo"]
+    command: ["--cycles", "5", "--backend-only"]
+    environment:
+      AGENTGUARD_BACKEND_URL: http://api:8001
+      SPLUNK_HEC_URL: ${SPLUNK_HEC_URL:-}
+      SPLUNK_HEC_TOKEN: ${SPLUNK_HEC_TOKEN:-}
+      SPLUNK_MOCK: ${SPLUNK_MOCK:-1}
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  pgdata:

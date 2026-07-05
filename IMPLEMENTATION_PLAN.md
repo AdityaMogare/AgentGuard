@@ -26,6 +26,20 @@ AgentGuard instruments multi-agent AI systems with a lightweight Python SDK, str
 
 ---
 
+## Phase 8 — Production hardening (planned)
+
+See **[PRODUCTION_HARDENING_PLAN.md](PRODUCTION_HARDENING_PLAN.md)** for full spec:
+
+| Track | Scope |
+|-------|--------|
+| **Auth** | JWT (SimpleJWT) + hashed SDK keys (`SDKApiKey` model), scoped permissions |
+| **Database** | PostgreSQL via `DATABASE_URL`, composite/partial indexes, query refactor |
+| **Async ingest** | Celery + Redis span queue, `202 Accepted` ingest, rollup tasks |
+
+**Suggested order:** PostgreSQL → Celery ingest → Auth.
+
+---
+
 ## Phase 1 — SDK (`sdk/agentguard/`)
 
 ### Keep from PromptOps
