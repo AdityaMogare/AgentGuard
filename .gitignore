@@ -85,6 +85,9 @@ dist/
 # --- Cursor (local IDE state) ---
 .cursor/
 
+# --- AgentGuard seer ledgers ---
+.agentguard/
+
 # --- Python packaging (sdk/) ---
 sdk/dist/
 sdk/build/

@@ -19,8 +19,12 @@ AgentGuard instruments multi-agent AI systems with a lightweight Python SDK, str
 | **5** | MCP: 3 tools + Splunk job polling + Django fallback | ✅ Done |
 | **6** | Polish: README, PyPI `agentguard`, optional React | 🔄 README done; PyPI manual; React optional |
 | **7** | Hackathon: AI Assistant NL→SPL, MLTK/anomaly, smart alerts, demo script | ✅ Done |
+| **8** | Production hardening (JWT / Postgres / Celery) | 📋 Specced — see PRODUCTION_HARDENING_PLAN.md |
+| **9** | Seer: governed investigate → correlate → audit → remediate → publish | ✅ Done |
 
 **Phase 7 files:** `mcp_server/ai_assistant.py`, `mcp_server/anomaly.py`, `splunk_app/mltk_setup.py`, `splunk_app/default/alerts.conf`, `sdk/agentguard/alert_handler.py`, `scripts/demo.py`, `scripts/setup.sh`
+
+**Phase 9 files:** `seer/` — FSM + `step` MCP, hash-chained ledger + verify, windowed correlation, writer/auditor, remediation parse-gate, HEC publish (`agentguard:seer`)
 
 **Deprioritized / removed:** Python eval engine, Dataset/EvalRun APIs, LurisQA demo, GitHub Actions eval CLI.
 
@@ -37,6 +41,24 @@ See **[PRODUCTION_HARDENING_PLAN.md](PRODUCTION_HARDENING_PLAN.md)** for full sp
 | **Async ingest** | Celery + Redis span queue, `202 Accepted` ingest, rollup tasks |
 
 **Suggested order:** PostgreSQL → Celery ingest → Auth.
+
+---
+
+## Phase 9 — Seer (agent-native kassi)
+
+Closed loop over AgentGuard traces (no k6 in v1):
+
+1. Governed FSM with single `step` MCP tool (`seer/mcp_step.py`)
+2. Hash-chained ledger + `python -m seer.verify`
+3. Deterministic SPL correlation over wall-clock window + MLTK/anomaly
+4. Writer + independent auditor → sealed verdict
+5. Structured remediation → `ast` parse gate → unified diff
+6. Publish investigation walk to HEC (`sourcetype=agentguard:seer`)
+
+```bash
+SPLUNK_MOCK=1 python -m seer investigate --persist --no-hec
+python -m unittest seer.test_seer -v
+```
 
 ---
 

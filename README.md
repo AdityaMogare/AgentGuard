@@ -115,7 +115,21 @@ SPLUNK_MOCK=0 AGENTGUARD_BACKEND_URL=http://localhost:8001 python mcp_server/ser
 
 Tools: `search_agent_traces`, `explain_agent_failure`, `agent_health_summary`, `nl_search`, `anomaly_detection`, `failure_rate_analysis`, `alert_summary`, `check_ai_features`
 
-### 5. Hackathon demo (24h sprint)
+### 5. Seer (governed investigation)
+
+Agent-native closed loop: detect failure spikes in AgentGuard traces, correlate over an exact window, draft + audit a root cause, propose a validated remediation diff, publish the walk to Splunk HEC.
+
+```bash
+SPLUNK_MOCK=1 python -m seer investigate --persist --no-hec
+python -m seer.verify .agentguard/ledgers/<run_id>.jsonl
+
+# MCP: driver only sees step()
+SPLUNK_MOCK=1 python -m seer.mcp_step
+```
+
+Details: [seer/README.md](seer/README.md)
+
+### 6. Hackathon demo (24h sprint)
 
 ```bash
 chmod +x scripts/setup.sh
@@ -146,16 +160,11 @@ Live Splunk: set `SPLUNK_MOCK=0`, `SPLUNK_HEC_*`, `SPLUNK_REST_TOKEN`, optional 
 | `backend/` | Django + DRF span ingest |
 | `demo/` | psutil infrastructure monitors |
 | `mcp_server/` | Splunk MCP tools + AI Assistant NL→SPL |
+| `seer/` | Governed investigation FSM, ledger, correlate, remediate |
 | `splunk_app/` | SPL saved searches, alerts, MLTK setup |
 | `scripts/` | `setup.sh`, `demo.py` hackathon pipeline |
 | `DOCKER.md` | Docker Compose setup for teammates |
 | `docker-compose.yml` | API + PostgreSQL + Redis |
 | `IMPLEMENTATION_PLAN.md` | Full build roadmap |
 
-## Legacy PromptOps
 
-Prompt/eval APIs under `/api/v1/prompts/` remain for reference. New work uses AgentGuard spans only.
-
-## License
-
-MIT
