@@ -7,3 +7,4 @@ class ApiConfig(AppConfig):
 
     def ready(self):
         from . import agent_models  # noqa: F401 — register AgentRun / Span with Django
+        from . import auth_models  # noqa: F401 — register SDKApiKey

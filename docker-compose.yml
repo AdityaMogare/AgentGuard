@@ -44,6 +44,7 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
       CELERY_TASK_ALWAYS_EAGER: ${CELERY_TASK_ALWAYS_EAGER:-1}
+      ASYNC_SPAN_INGEST: ${ASYNC_SPAN_INGEST:-0}
       AGENTGUARD_BACKEND_URL: http://api:8001
       AGENTGUARD_API_KEY: ${AGENTGUARD_API_KEY:-}
       SPLUNK_MOCK: ${SPLUNK_MOCK:-1}
@@ -68,12 +69,33 @@ services:
           "CMD",
           "python",
           "-c",
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/')",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/api/v1/health/')",
         ]
       interval: 15s
       timeout: 5s
       retries: 5
       start_period: 30s
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["celery", "-A", "promptops_backend", "worker", "-Q", "spans,metrics,celery", "-l", "info"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-agentguard}:${POSTGRES_PASSWORD:-agentguard}@db:5432/${POSTGRES_DB:-agentguard}
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      CELERY_TASK_ALWAYS_EAGER: "0"
+      ASYNC_SPAN_INGEST: ${ASYNC_SPAN_INGEST:-1}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-change-me-in-production}
+      DEBUG: ${DEBUG:-1}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    profiles: ["async"]
     restart: unless-stopped
 
   # One-shot: inject 150 demo spans into the API

@@ -88,9 +88,29 @@ python manage.py makemigrations api   # first time only
 python manage.py migrate
 python manage.py runserver 8001
 # GET http://localhost:8001/api/v1/agents/
+# GET http://localhost:8001/api/v1/health/
 ```
 
-Optional ingest auth: set `AGENTGUARD_API_KEY` in `.env` (SDK sends `Authorization: Api-Key ...`).
+Optional ingest auth:
+
+```bash
+# Legacy env key (dev)
+export AGENTGUARD_API_KEY=dev-secret
+
+# Or hashed SDK key (production-style)
+python manage.py createsuperuser   # once, for JWT
+python manage.py create_sdk_key --name ingest
+# Use Authorization: Api-Key ag_…
+# JWT: POST /api/v1/auth/token/  then manage keys at /api/v1/auth/keys/
+```
+
+Async ingest (Celery + Redis):
+
+```bash
+export ASYNC_SPAN_INGEST=1 CELERY_TASK_ALWAYS_EAGER=0
+celery -A promptops_backend worker -Q spans,metrics,celery -l info
+# or: docker compose --profile async up --build -d
+```
 
 ### 3. Splunk HEC
 

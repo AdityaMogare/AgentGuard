@@ -6,7 +6,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .agent_models import AgentAlert
-from .permissions import AgentGuardAPIKeyPermission
+from .authentication import SDKKeyAuthentication
+from .permissions import HasScopeAlertsWrite
 
 logger = logging.getLogger("agentguard.alerts")
 
@@ -31,8 +32,8 @@ class AlertWebhookView(APIView):
     Splunk webhook action should POST JSON to /api/v1/alerts/webhook/
     """
 
-    permission_classes = [AgentGuardAPIKeyPermission]
-    authentication_classes = []
+    authentication_classes = [SDKKeyAuthentication]
+    permission_classes = [HasScopeAlertsWrite]
 
     def get(self, request, *args, **kwargs):
         alerts = AgentAlert.objects.all()[:50]

@@ -19,6 +19,8 @@ class AgentRun(models.Model):
         ordering = ["-started_at"]
         indexes = [
             models.Index(fields=["agent_name", "status"]),
+            models.Index(fields=["-started_at", "agent_name"], name="idx_run_started_agent"),
+            models.Index(fields=["status", "-started_at"], name="idx_run_status_started"),
         ]
 
     def __str__(self):
@@ -53,6 +55,8 @@ class Span(models.Model):
         indexes = [
             models.Index(fields=["agent_run", "created_at"]),
             models.Index(fields=["status", "agent_name"]),
+            models.Index(fields=["-created_at", "status"], name="idx_span_created_status"),
+            models.Index(fields=["agent_name", "-created_at"], name="idx_span_agent_created"),
         ]
 
     def __str__(self):
@@ -77,3 +81,21 @@ class AgentAlert(models.Model):
 
     def __str__(self):
         return f"{self.alert_name} ({self.severity})"
+
+
+class AgentMetricRollup(models.Model):
+    """Hourly aggregates to avoid full table scans on dashboards."""
+
+    agent_name = models.CharField(max_length=200, db_index=True)
+    hour = models.DateTimeField(db_index=True)
+    span_count = models.IntegerField(default=0)
+    failure_count = models.IntegerField(default=0)
+    avg_latency_ms = models.FloatField(default=0.0)
+    total_cost = models.FloatField(default=0.0)
+
+    class Meta:
+        unique_together = [("agent_name", "hour")]
+        ordering = ["-hour"]
+
+    def __str__(self):
+        return f"{self.agent_name}@{self.hour.isoformat()}"

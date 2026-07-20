@@ -32,8 +32,11 @@ class BackendExporter(SpanExporter):
                 response = requests.post(
                     url, json={"span": event}, headers=headers, timeout=5.0
                 )
-                if response.status_code in (200, 201):
+                if response.status_code in (200, 201, 202):
                     return
+                if response.status_code == 503:
+                    time.sleep(0.5 * (attempt + 1))
+                    continue
                 logger.warning(
                     "Backend export status %s: %s",
                     response.status_code,

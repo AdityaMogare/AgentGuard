@@ -1,128 +1,176 @@
+"""AgentGuard span ingest + agent run APIs."""
+from __future__ import annotations
+
 import logging
-import uuid
+
+from django.conf import settings
 from django.db.models import Avg, Sum
-from django.shortcuts import get_object_or_404
-from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from rest_framework import status, viewsets
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .agent_models import AgentRun, Span
 from .agent_serializers import AgentRunSerializer, SpanSerializer
-from .permissions import AgentGuardAPIKeyPermission
+from .authentication import JWTAuthentication, SDKKeyAuthentication
+from .permissions import HasScopeAgentsRead, HasScopeSpansWrite
+from .span_service import SpanValidationError, parse_span_event, upsert_span
 
 logger = logging.getLogger("agentguard.views")
+
+
+class AgentRunPagination(PageNumberPagination):
+    page_size = 50
+    page_size_query_param = "page_size"
+    max_page_size = 200
 
 
 class SpanIngestView(APIView):
     """Ingest span events from the AgentGuard SDK backend exporter."""
 
-    permission_classes = [AgentGuardAPIKeyPermission]
+    authentication_classes = [c for c in [SDKKeyAuthentication] if c]
+    permission_classes = [HasScopeSpansWrite]
 
     def post(self, request, *args, **kwargs):
         payload = request.data or {}
-        event = payload.get("span") or payload
-        required = ("trace_id", "span_id", "agent_name", "status")
-        missing = [f for f in required if not event.get(f)]
-        if missing:
+        event = parse_span_event(payload if isinstance(payload, dict) else {})
+
+        if getattr(settings, "ASYNC_SPAN_INGEST", False):
+            try:
+                # Validate before enqueue so clients get 400, not silent worker failure
+                from .span_service import validate_and_parse_ids
+
+                validate_and_parse_ids(event)
+            except SpanValidationError as exc:
+                return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+            from .tasks import ingest_span_task
+
+            ingest_span_task.delay(event)
             return Response(
-                {"error": f"Missing required span fields: {missing}"},
-                status=status.HTTP_400_BAD_REQUEST,
+                {
+                    "message": "accepted",
+                    "async": True,
+                    "trace_id": str(event.get("trace_id")),
+                    "span_id": str(event.get("span_id")),
+                },
+                status=status.HTTP_202_ACCEPTED,
             )
 
         try:
-            trace_id = uuid.UUID(str(event["trace_id"]))
-            span_id = uuid.UUID(str(event["span_id"]))
-            parent_span_id = (
-                uuid.UUID(str(event["parent_span_id"]))
-                if event.get("parent_span_id")
-                else None
-            )
-        except ValueError as exc:
-            return Response(
-                {"error": f"Invalid UUID: {exc}"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        agent_run, created = AgentRun.objects.get_or_create(
-            trace_id=trace_id,
-            defaults={
-                "agent_name": event["agent_name"],
-                "status": "RUNNING",
-            },
-        )
-
-        if created is False and agent_run.agent_name != event["agent_name"]:
-            agent_run.agent_name = event["agent_name"]
-            agent_run.save(update_fields=["agent_name"])
-
-        span, span_created = Span.objects.update_or_create(
-            span_id=span_id,
-            defaults={
-                "agent_run": agent_run,
-                "parent_span_id": parent_span_id,
-                "agent_name": event.get("agent_name", agent_run.agent_name),
-                "action_type": event.get("action_type", "observe"),
-                "tool_name": event.get("tool_name"),
-                "status": event.get("status", "SUCCESS"),
-                "error_type": event.get("error_type"),
-                "latency_ms": float(event.get("latency_ms", 0.0)),
-                "input_data": event.get("input") or event.get("input_data") or {},
-                "output": str(event.get("output", ""))[:8000],
-                "prompt_tokens": int(event.get("prompt_tokens", 0)),
-                "completion_tokens": int(event.get("completion_tokens", 0)),
-                "cost": float(event.get("cost", 0.0)),
-            },
-        )
-
-        # Update run aggregates
-        spans = Span.objects.filter(agent_run=agent_run)
-        failed = spans.filter(status__in=["FAILED", "TIMEOUT"]).count()
-        run_status = "FAILED" if failed else "SUCCESS"
-        if spans.filter(status="RUNNING").exists():
-            run_status = "RUNNING"
-
-        agent_run.span_count = spans.count()
-        agent_run.failed_span_count = failed
-        agent_run.status = run_status
-        if run_status in ("SUCCESS", "FAILED"):
-            agent_run.ended_at = timezone.now()
-        agent_run.save()
+            result = upsert_span(event)
+        except SpanValidationError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response(
             {
                 "message": "Span ingested",
-                "trace_id": str(trace_id),
-                "span_id": str(span_id),
-                "created": span_created,
+                "trace_id": str(result.trace_id),
+                "span_id": str(result.span_id),
+                "created": result.created,
             },
             status=status.HTTP_201_CREATED,
+        )
+
+
+class SpanIngestBatchView(APIView):
+    """Batch ingest (max 100). Async when ASYNC_SPAN_INGEST=1."""
+
+    authentication_classes = [c for c in [SDKKeyAuthentication] if c]
+    permission_classes = [HasScopeSpansWrite]
+
+    def post(self, request, *args, **kwargs):
+        payload = request.data or {}
+        spans = payload.get("spans") if isinstance(payload, dict) else None
+        if not isinstance(spans, list):
+            return Response({"error": "Expected {\"spans\": [...]}"}, status=400)
+        if len(spans) > 100:
+            return Response({"error": "Max 100 spans per batch"}, status=400)
+
+        if getattr(settings, "ASYNC_SPAN_INGEST", False):
+            from .tasks import ingest_span_task
+
+            for event in spans:
+                ingest_span_task.delay(event if isinstance(event, dict) else {})
+            return Response(
+                {"message": "accepted", "async": True, "count": len(spans)},
+                status=status.HTTP_202_ACCEPTED,
+            )
+
+        results = []
+        errors = []
+        for i, event in enumerate(spans):
+            try:
+                r = upsert_span(event if isinstance(event, dict) else {})
+                results.append(
+                    {
+                        "trace_id": str(r.trace_id),
+                        "span_id": str(r.span_id),
+                        "created": r.created,
+                    }
+                )
+            except SpanValidationError as exc:
+                errors.append({"index": i, "error": str(exc)})
+        return Response(
+            {"message": "Batch ingested", "results": results, "errors": errors},
+            status=status.HTTP_201_CREATED if results else status.HTTP_400_BAD_REQUEST,
         )
 
 
 class AgentRunViewSet(viewsets.ReadOnlyModelViewSet):
     """List and retrieve agent runs with span trees."""
 
-    queryset = AgentRun.objects.all()
     serializer_class = AgentRunSerializer
     lookup_field = "trace_id"
+    pagination_class = AgentRunPagination
+    authentication_classes = [
+        c for c in [JWTAuthentication, SDKKeyAuthentication] if c
+    ]
+    permission_classes = [HasScopeAgentsRead]
+
+    def get_queryset(self):
+        qs = AgentRun.objects.annotate(
+            avg_latency=Avg("spans__latency_ms"),
+            total_cost=Sum("spans__cost"),
+        ).order_by("-started_at")
+
+        agent_name = self.request.query_params.get("agent_name")
+        run_status = self.request.query_params.get("status")
+        since = self.request.query_params.get("since")
+        if agent_name:
+            qs = qs.filter(agent_name=agent_name)
+        if run_status:
+            qs = qs.filter(status=run_status)
+        if since:
+            dt = parse_datetime(since)
+            if dt:
+                qs = qs.filter(started_at__gte=dt)
+        return qs
 
     def list(self, request, *args, **kwargs):
-        runs = self.get_queryset()[:100]
+        queryset = self.filter_queryset(self.get_queryset())
+        # Paginate only when client asks (?page=) — bare list keeps MCP/demo compat
+        if "page" in request.query_params or "page_size" in request.query_params:
+            page = self.paginate_queryset(queryset)
+            runs = page
+            paginate = True
+        else:
+            runs = list(queryset[:100])
+            paginate = False
+
         data = []
         for run in runs:
-            stats = Span.objects.filter(agent_run=run).aggregate(
-                avg_latency=Avg("latency_ms"),
-                total_cost=Sum("cost"),
-            )
             serialized = self.get_serializer(run).data
             serialized["analytics"] = {
-                "avg_latency_ms": round(stats["avg_latency"] or 0.0, 2),
-                "total_cost": round(float(stats["total_cost"] or 0.0), 6),
+                "avg_latency_ms": round(getattr(run, "avg_latency", None) or 0.0, 2),
+                "total_cost": round(float(getattr(run, "total_cost", None) or 0.0), 6),
                 "span_count": run.span_count,
                 "failed_span_count": run.failed_span_count,
             }
             data.append(serialized)
+        if paginate:
+            return self.get_paginated_response(data)
         return Response(data)
 
     def retrieve(self, request, *args, **kwargs):

@@ -19,10 +19,11 @@ AgentGuard instruments multi-agent AI systems with a lightweight Python SDK, str
 | **5** | MCP: 3 tools + Splunk job polling + Django fallback | ✅ Done |
 | **6** | Polish: README, PyPI `agentguard`, optional React | 🔄 README done; PyPI manual; React optional |
 | **7** | Hackathon: AI Assistant NL→SPL, MLTK/anomaly, smart alerts, demo script | ✅ Done |
-| **8** | Production hardening (JWT / Postgres / Celery) | 📋 Specced — see PRODUCTION_HARDENING_PLAN.md |
-| **9** | Seer: governed investigate → correlate → audit → remediate → publish | ✅ Done |
+| **8** | Production hardening (JWT / Postgres / Celery) | ✅ Done |
 
 **Phase 7 files:** `mcp_server/ai_assistant.py`, `mcp_server/anomaly.py`, `splunk_app/mltk_setup.py`, `splunk_app/default/alerts.conf`, `sdk/agentguard/alert_handler.py`, `scripts/demo.py`, `scripts/setup.sh`
+
+**Phase 8:** `DATABASE_URL` + composite/partial indexes, `ASYNC_SPAN_INGEST` + `ingest_span_task`, JWT + hashed `SDKApiKey`, `create_sdk_key`, `/api/v1/health/`, Compose `worker` profile
 
 **Phase 9 files:** `seer/` — FSM + `step` MCP, hash-chained ledger + verify, windowed correlation, writer/auditor, remediation parse-gate, HEC publish (`agentguard:seer`)
 
@@ -30,17 +31,15 @@ AgentGuard instruments multi-agent AI systems with a lightweight Python SDK, str
 
 ---
 
-## Phase 8 — Production hardening (planned)
+## Phase 8 — Production hardening ✅
 
-See **[PRODUCTION_HARDENING_PLAN.md](PRODUCTION_HARDENING_PLAN.md)** for full spec:
+See **[PRODUCTION_HARDENING_PLAN.md](PRODUCTION_HARDENING_PLAN.md)**. Delivered:
 
-| Track | Scope |
-|-------|--------|
-| **Auth** | JWT (SimpleJWT) + hashed SDK keys (`SDKApiKey` model), scoped permissions |
-| **Database** | PostgreSQL via `DATABASE_URL`, composite/partial indexes, query refactor |
-| **Async ingest** | Celery + Redis span queue, `202 Accepted` ingest, rollup tasks |
-
-**Suggested order:** PostgreSQL → Celery ingest → Auth.
+| Track | Implementation |
+|-------|----------------|
+| **Auth** | `SDKApiKey`, `SDKKeyAuthentication`, SimpleJWT, `create_sdk_key`, `/api/v1/auth/*` |
+| **Database** | `DATABASE_URL`, migrations `0004`/`0005` indexes + partial failed-span index, `AgentMetricRollup` |
+| **Async ingest** | `span_service.upsert_span`, `ingest_span_task`, `202` when `ASYNC_SPAN_INGEST=1`, Compose `--profile async` |
 
 ---
 

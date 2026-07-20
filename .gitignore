@@ -42,6 +42,7 @@ staticfiles/
 .env
 .env.*
 !.env.example
+!.env.docker.example
 
 # --- Testing / coverage ---
 .pytest_cache/

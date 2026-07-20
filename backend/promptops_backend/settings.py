@@ -154,3 +154,51 @@ CELERY_TIMEZONE = 'UTC'
 CELERY_TASK_ALWAYS_EAGER = os.environ.get("CELERY_TASK_ALWAYS_EAGER", "1").strip() in (
     "1", "true", "True", "yes",
 )
+
+CELERY_TASK_ROUTES = {
+    "api.tasks.ingest_span_task": {"queue": "spans"},
+    "api.tasks.rollup_agent_metrics": {"queue": "metrics"},
+    "api.tasks.flush_stale_runs": {"queue": "metrics"},
+}
+
+from datetime import timedelta  # noqa: E402
+
+try:
+    from celery.schedules import crontab
+
+    CELERY_BEAT_SCHEDULE = {
+        "rollup-hourly": {
+            "task": "api.tasks.rollup_agent_metrics",
+            "schedule": crontab(minute=5),
+        },
+        "flush-stale-runs": {
+            "task": "api.tasks.flush_stale_runs",
+            "schedule": crontab(minute="*/15"),
+        },
+    }
+except ImportError:  # pragma: no cover
+    CELERY_BEAT_SCHEDULE = {}
+
+# Async span ingest — HTTP returns 202; worker persists (set ASYNC_SPAN_INGEST=1)
+ASYNC_SPAN_INGEST = os.environ.get("ASYNC_SPAN_INGEST", "0").strip() in (
+    "1", "true", "True", "yes",
+)
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "api.authentication.JWTAuthentication",
+        "api.authentication.SDKKeyAuthentication",
+    ],
+    # Keep AllowAny by default so legacy PromptOps endpoints stay open;
+    # AgentGuard views set explicit permission_classes.
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.AllowAny",
+    ],
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 50,
+}
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=1),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+}
